@@ -6,4 +6,10 @@ var FOO = 1;
 /** @const {string} BAZ */
 
 /** @const {number} */
-var FOOS = 2;
+var QUX = 0;
+
+/** @const {Object} SOCKET */
+var mySocket;
+
+/** @const ROCKET */
+var myRocket;

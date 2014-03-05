@@ -3,6 +3,19 @@ var fs = require('jsdoc/fs');
 var path = require('jsdoc/path');
 var util = require('util');
 
+var jsdoc = {
+    augment: require('jsdoc/augment'),
+    borrow: require('jsdoc/borrow'),
+    schema: require('jsdoc/schema'),
+    src: {
+        handlers: require('jsdoc/src/handlers'),
+        parser: require('jsdoc/src/parser')
+    },
+    util: {
+        runtime: require('jsdoc/util/runtime')
+    }
+};
+
 var hasOwnProp = Object.prototype.hasOwnProperty;
 
 var jasmineAll = require('./lib/jasmine');
@@ -11,24 +24,20 @@ var jasmineNode = ( require('./reporter') )(jasmine);
 
 var reporter = null;
 
-jasmine.jsParsers = (function() {
-    var PARSERS = require('jsdoc/src/parser').PARSERS;
+jasmine.parseResults = [];
 
-    var jsParsers = [];
+// use the requested parser, or default to Esprima (on Node.js) or Rhino (on Rhino)
+jasmine.jsParser = (function() {
+    var parser = jsdoc.util.runtime.isRhino() ? 'rhino' : 'esprima';
 
-    // on Rhino, we should test all available parsers; on Node.js, we should test all parsers except
-    // Rhino
-    // TODO: support testing more than one parser per runtime
-    if ( require('jsdoc/util/runtime').isRhino() ) {
-        jsParsers.push('rhino');
+    if (env.opts.query && env.opts.query.parser) {
+        parser = env.opts.query.parser;
+        // remove this so the config tests don't complain
+        delete env.opts.query;
     }
-    jsParsers.push('esprima');
 
-    return jsParsers;
+    return parser;
 })();
-
-// TODO: support testing more than one parser per runtime
-jasmine.currentParser = jasmine.jsParsers[0];
 
 jasmine.initialize = function(done, verbose) {
     var jasmineEnv = jasmine.getEnv();
@@ -41,7 +50,6 @@ jasmine.initialize = function(done, verbose) {
     }
 
     var reporterOpts = {
-        print: util.print,
         color: env.opts.nocolor === true ? false : true,
         onComplete: done
     };
@@ -58,15 +66,13 @@ jasmine.initialize = function(done, verbose) {
 };
 
 jasmine.createParser = function(type) {
-    return require('jsdoc/src/parser').createParser(type || jasmine.currentParser);
+    return jsdoc.src.parser.createParser(type || jasmine.jsParser);
 };
 
 function capitalize(str) {
     return str[0].toUpperCase() + str.slice(1);
 }
 
-// TODO: Jasmine only lets us run the specs once, which means we're only testing one parser per
-// runtime. Need to find a good way around this.
 /**
  * Execute the specs in the specified folder.
  *
@@ -125,22 +131,30 @@ jasmine.asyncSpecDone = function() {
     jasmine.asyncSpecWait.done = true;
 };
 
-jasmine.getDocSetFromFile = function(filename, parser) {
-    var sourceCode = fs.readFileSync( path.join(env.dirname, filename), 'utf8' );
-    var runtime = require('jsdoc/util/runtime');
-    var testParser = parser || jasmine.createParser();
-    var indexAll = require('jsdoc/borrow').indexAll;
+jasmine.getDocSetFromFile = function(filename, parser, validate) {
     var doclets;
+    var validationResult;
 
-    require('jsdoc/src/handlers').attachTo(testParser);
+    var sourceCode = fs.readFileSync( path.join(env.dirname, filename), 'utf8' );
+    var testParser = parser || jasmine.createParser();
+
+    jsdoc.src.handlers.attachTo(testParser);
 
     doclets = testParser.parse('javascript:' + sourceCode);
-    indexAll(doclets);
+    jsdoc.borrow.indexAll(doclets);
 
-    require('jsdoc/augment').addInherited(doclets);
+    jsdoc.augment.addInherited(doclets);
 
     // test assume borrows have not yet been resolved
     // require('jsdoc/borrow').resolveBorrows(doclets);
+
+    // store the parse results for later validation
+    if (validate !== false) {
+        jasmine.parseResults.push({
+            filename: filename,
+            doclets: doclets
+        });
+    }
 
     return {
         doclets: doclets,

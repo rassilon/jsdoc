@@ -1,4 +1,4 @@
-/*global describe: true, expect: true, it: true, jasmine: true */
+/*global describe, expect, it, jasmine */
 describe("lends", function() {
     describe("when a documented member is inside an object literal associated with a @lends tag", function() {
         describe("standard case", function() {
@@ -49,6 +49,41 @@ describe("lends", function() {
             });
         });
 
+        describe("case that uses @lends within a closure", function() {
+            var docSet = jasmine.getDocSetFromFile('test/fixtures/lends4.js');
+            var person = docSet.getByLongname('Person');
+            var say = docSet.getByLongname('Person#say');
+
+            it("The class constructor should be documented with the name of the lendee", function() {
+                expect(person.length).toBe(1);
+                expect(person[0].name).toBe('Person');
+                expect(person[0].kind).toBe('class');
+            });
+
+            it("A class' instance method should be documented as a member of the lendee", function() {
+                expect(say.length).toBe(1);
+            });
+        });
+
+        describe("case that uses @lends within nested function calls", function() {
+            var docSet = jasmine.getDocSetFromFile('test/fixtures/lends5.js');
+            var person = docSet.getByLongname('Person').filter(function(d) {
+                return !d.undocumented;
+            })[0];
+            var say = docSet.getByLongname('Person#say').filter(function(d) {
+                return !d.undocumented;
+            })[0];
+
+            it("The class constructor should be documented with the name of the lendee", function() {
+                expect(person).toBeDefined();
+                expect(person.name).toBe('Person');
+                expect(person.kind).toBe('class');
+            });
+
+            it("A class' instance method should be documented as a member of the lendee", function() {
+                expect(say).toBeDefined();
+            });
+        });
     });
 
     describe("when a documented member is inside an objlit associated with a @lends tag that has no value.", function() {
